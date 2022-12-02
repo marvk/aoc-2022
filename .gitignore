@@ -1,0 +1,5 @@
+/target
+.idea
+*.iml
+input
+src/day_template.rs
