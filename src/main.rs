@@ -4,25 +4,28 @@ use std::env;
 
 use crate::day01::day01;
 use crate::day02::day02;
+use crate::day03::day03;
+use crate::day04::day04;
+use crate::day05::day05;
 
 mod harness;
 mod day01;
 mod day02;
-
+mod day03;
+mod day04;
+mod day05;
 
 fn main() {
-    let days = vec![day01(), day02()];
+    let days = vec![day05()];
 
-    let run_one = |id: usize| { days[id].run(); };
+    let run_one = |id: usize| days[id].run();
 
     let run_all = ||
         for day in &days {
-            day.run()
+            day.run();
         };
 
-    let run_latest = ||
-        run_one(days.len());
-
+    let run_latest = || run_one(days.len());
 
     let args = env::args().collect::<Vec<_>>();
 

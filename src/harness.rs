@@ -39,13 +39,14 @@ impl<Result1: PartialEq + Debug, Result2: PartialEq + Debug> Day<Result1, Result
     fn run_part_test<Result: PartialEq + Debug>(&self, id: u8, part: &Box<dyn Part<Result>>) {
         let (actual, duration) = Self::timed(|| { part.solve(&self.test_input) });
         let expected = part.expect_test();
-        assert_eq!(actual, expected, "Part {} test failed: Expected {:?} but got {:?}", id, actual, expected);
+        assert_eq!(actual, expected, "Part {} test failed: Expected {:?} but got {:?}", id, expected, actual);
         println!("{}", format!("Part {} test was {} {:>10}", id, "successful".on_bright_green(), format!("{:?}", duration).purple()));
     }
 
-    fn run_part_actual<Result: PartialEq + Debug>(&self, id: u8, part: &Box<dyn Part<Result>>) {
+    fn run_part_actual<Result: PartialEq + Debug>(&self, id: u8, part: &Box<dyn Part<Result>>) -> Duration {
         let (actual, duration) = Self::timed(|| { part.solve(&self.actual_input) });
         println!("{}", format!("Part {} output {:>12} {:>10}", id, format!("{:?}", actual).blue(), format!("{:?}", duration).purple()).on_blue());
+        duration
     }
 
     pub fn run_test(&self) {
@@ -58,12 +59,13 @@ impl<Result1: PartialEq + Debug, Result2: PartialEq + Debug> Day<Result1, Result
         self.run_part_actual(2, &self.part2);
     }
 
-    pub fn run(&self) {
+    pub fn run(&self) -> (Duration, Duration) {
         println!("~~~~~~~~{{ {} }} ~~~~~~~~", format!("Day{:0>2}", self.id).yellow());
         self.run_part_test(1, &self.part1);
-        self.run_part_actual(1, &self.part1);
+        let first = self.run_part_actual(1, &self.part1);
         self.run_part_test(2, &self.part2);
-        self.run_part_actual(2, &self.part2);
+        let second = self.run_part_actual(2, &self.part2);
+        (first, second)
     }
 }
 
