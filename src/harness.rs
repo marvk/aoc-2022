@@ -6,21 +6,25 @@ use std::time::{Duration, Instant};
 
 use colored::Colorize;
 
-pub trait Part<Result: PartialEq + Debug> {
-    fn expect_test(&self) -> Result;
-    fn solve(&self, input: &Vec<String>) -> Result;
+pub trait AocResult: Debug + PartialEq {}
+
+impl<T: Debug + PartialEq> AocResult for T {}
+
+pub trait Part<R: AocResult> {
+    fn expect_test(&self) -> R;
+    fn solve(&self, input: &Vec<String>) -> R;
 }
 
-pub struct Day<Result1: PartialEq + Debug, Result2: PartialEq + Debug> {
+pub struct Day<R1: AocResult, R2: AocResult> {
     id: u8,
     test_input: Vec<String>,
     actual_input: Vec<String>,
-    part1: Box<dyn Part<Result1>>,
-    part2: Box<dyn Part<Result2>>,
+    part1: Box<dyn Part<R1>>,
+    part2: Box<dyn Part<R2>>,
 }
 
-impl<Result1: PartialEq + Debug, Result2: PartialEq + Debug> Day<Result1, Result2> {
-    pub fn new(id: u8, part1: Box<dyn Part<Result1>>, part2: Box<dyn Part<Result2>>) -> Self {
+impl<R1: AocResult + 'static, R2: AocResult+ 'static> Day<R1, R2> {
+    pub fn new(id: u8, part1: Box<dyn Part<R1>>, part2: Box<dyn Part<R2>>) -> Self {
         Self {
             id,
             test_input: read_input(format!("input/{:0>2}_test.txt", id).as_str()),
@@ -30,20 +34,21 @@ impl<Result1: PartialEq + Debug, Result2: PartialEq + Debug> Day<Result1, Result
         }
     }
 
-    fn timed<Result: PartialEq + Debug, F: Fn() -> Result>(f: F) -> (Result, Duration) {
+    fn timed<R: AocResult, F: Fn() -> R>(f: F) -> (R, Duration) {
         let start = Instant::now();
         let result = f();
         (result, start.elapsed())
     }
 
-    fn run_part_test<Result: PartialEq + Debug>(&self, id: u8, part: &Box<dyn Part<Result>>) {
+    fn run_part_test<R: AocResult>(&self, id: u8, part: &Box<dyn Part<R>>) -> Duration {
         let (actual, duration) = Self::timed(|| { part.solve(&self.test_input) });
         let expected = part.expect_test();
         assert_eq!(actual, expected, "Part {} test failed: Expected {:?} but got {:?}", id, expected, actual);
         println!("{}", format!("Part {} test was {} {:>10}", id, "successful".on_bright_green(), format!("{:?}", duration).purple()));
+        duration
     }
 
-    fn run_part_actual<Result: PartialEq + Debug>(&self, id: u8, part: &Box<dyn Part<Result>>) -> Duration {
+    fn run_part_actual<R: AocResult>(&self, id: u8, part: &Box<dyn Part<R>>) -> Duration {
         let (actual, duration) = Self::timed(|| { part.solve(&self.actual_input) });
         println!("{}", format!("Part {} output {:>12} {:>10}", id, format!("{:?}", actual).blue(), format!("{:?}", duration).purple()).on_blue());
         duration
@@ -66,6 +71,20 @@ impl<Result1: PartialEq + Debug, Result2: PartialEq + Debug> Day<Result1, Result
         self.run_part_test(2, &self.part2);
         let second = self.run_part_actual(2, &self.part2);
         (first, second)
+    }
+
+    pub fn f(self) -> DayRunner {
+        DayRunner::new(Box::new(move || self.run()))
+    }
+}
+
+pub struct DayRunner {
+    pub f: Box<dyn Fn() -> (Duration, Duration)>,
+}
+
+impl DayRunner {
+    pub fn new(f: Box<dyn Fn() -> (Duration, Duration)>) -> Self {
+        Self { f }
     }
 }
 
