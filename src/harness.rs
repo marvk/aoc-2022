@@ -54,6 +54,14 @@ impl<R1: AocResult + 'static, R2: AocResult+ 'static> Day<R1, R2> {
         duration
     }
 
+    pub fn run_part1_test(&self) {
+        self.run_part_test(1, &self.part1);
+    }
+
+    pub fn run_part2_test(&self) {
+        self.run_part_test(2, &self.part2);
+    }
+
     pub fn run_test(&self) {
         self.run_part_test(1, &self.part1);
         self.run_part_test(2, &self.part2);

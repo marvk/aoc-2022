@@ -111,9 +111,9 @@ fn parse_tree(input: &Vec<String>) -> Rc<Directory> {
         match &cmd.split(" ").collect::<Vec<_>>()[..] {
             ["$", "cd", "/"] => { stack.drain(1..); }
             ["$", "cd", ".."] => { stack.pop_back(); }
-            ["$", "cd", directory] => { stack.push_back(stack.back().unwrap().push_directory(Directory::new(directory.to_string()))) },
-            ["$", "ls"] | ["dir", _] => {}
-            [size, filename] => { stack.back().unwrap().push_file(File::new(filename.to_string(), size.parse().unwrap())) },
+            ["$", "cd", directory] => { stack.push_back(stack.back().unwrap().push_directory(Directory::new(directory.to_string()))) }
+            ["$", _] | ["dir", _] => {}
+            [size, filename] => { stack.back().unwrap().push_file(File::new(filename.to_string(), size.parse().unwrap())) }
             _ => {}
         }
     }

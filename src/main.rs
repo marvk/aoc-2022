@@ -1,7 +1,5 @@
 #![allow(dead_code, unused_imports)]
 
-extern crate core;
-
 use std::any::Any;
 use std::cmp::max;
 use std::env;
@@ -17,6 +15,7 @@ use crate::day05::day05;
 use crate::day06::day06;
 use crate::day07::day07;
 use crate::day08::day08;
+use crate::day09::day09;
 use crate::harness::{AocResult, Day};
 
 mod harness;
@@ -28,6 +27,7 @@ mod day05;
 mod day06;
 mod day07;
 mod day08;
+mod day09;
 
 fn main() {
     let days = vec![
@@ -39,7 +39,9 @@ fn main() {
         day06().f(),
         day07().f(),
         day08().f(),
+        day09().f(),
     ];
+
 
     let run_one = |id: usize| (days[id].f)();
 
