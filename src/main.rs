@@ -4,7 +4,8 @@ use std::any::Any;
 use std::cmp::max;
 use std::env;
 use std::fmt::Debug;
-use std::process::Command;
+use std::io::Error;
+use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 
 use crate::day01::day01;
@@ -93,10 +94,10 @@ fn main() {
 
     let run_one = |id: usize| (days[id - 1].f)();
 
-    let run_all = ||
-        for day in &days {
-            (day.f)();
-        };
+    let run_all = || {
+        let (p1, p2) = days.iter().map(|d| (d.f)()).unzip();
+        plot(p1, p2).unwrap();
+    };
 
     let run_latest = || run_one(days.len());
 
@@ -115,4 +116,19 @@ fn main() {
         }
         None => { run_latest(); }
     };
+}
+
+fn plot(part1: Vec<Duration>, part2: Vec<Duration>) -> Result<(), Error> {
+    let convert = |v: Vec<Duration>| v.into_iter().map(|d| d.as_micros()).map(|n| n.to_string()).collect::<Vec<_>>().join("#");
+
+    // Lol just plot with kotlin who's gonna stop me???
+    Command::new("java")
+        .arg("-jar")
+        .arg("plotter.jar")
+        .arg(&convert(part1))
+        .arg(&convert(part2))
+        .spawn()?
+        .wait()?;
+
+    Ok(())
 }
