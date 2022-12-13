@@ -39,55 +39,55 @@ impl Part<String> for Part2 {
 }
 
 fn solve(input: &Vec<String>) -> (i32, String) {
+    let mut result_1 = 0;
+    let mut result_2 = "".to_string();
+
     let mut x = 1;
-
-    let mut result = 0;
-
     let mut cycle = 1;
 
-    let mut result2 = "".to_string();
+    append_result_2(x, cycle, &mut result_2);
 
-    // shh sleep now
+    for inst in parse(input).into_iter() {
+        if let Some(summand) = inst {
+            append_result_2(x, cycle, &mut result_2);
+            cycle += 1;
+            append_result_1(x, cycle, &mut result_1);
 
+            x += summand;
+        }
+
+        append_result_2(x, cycle, &mut result_2);
+        cycle += 1;
+        append_result_1(x, cycle, &mut result_1);
+    }
+
+    (result_1, compose_result_2(result_2))
+}
+
+fn compose_result_2(result_2: String) -> String {
+    result_2
+        .chars()
+        .collect::<Vec<_>>()
+        .chunks(40)
+        .map(|w| w.iter().collect::<String>())
+        .take(6)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn append_result_1(x: i32, cycle: i32, result_1: &mut i32) {
+    if (cycle + 20) % 40 == 0 {
+        *result_1 = *result_1 + cycle * x;
+    }
+}
+
+fn append_result_2(x: i32, cycle: i32, result2: &mut String) {
     let cycle_mod = cycle % 40;
     if cycle_mod == x || cycle_mod - 1 == x || cycle_mod + 1 == x {
         result2.push('█');
     } else {
         result2.push('.');
     }
-
-    for inst in parse(input).into_iter() {
-        if let Some(summand) = inst {
-            let cycle_mod = cycle % 40;
-            if cycle_mod == x || cycle_mod - 1 == x || cycle_mod + 1 == x {
-                result2.push('█');
-            } else {
-                result2.push('.');
-            }
-
-            cycle += 1;
-
-            if (cycle + 20) % 40 == 0 {
-                result += cycle * x;
-            }
-
-
-            x += summand;
-        }
-        let cycle_mod = cycle % 40;
-        if cycle_mod == x || cycle_mod - 1 == x || cycle_mod + 1 == x {
-            result2.push('█');
-        } else {
-            result2.push('.');
-        }
-        cycle += 1;
-        if (cycle + 20) % 40 == 0 {
-            result += cycle * x;
-        }
-    }
-
-    let map = result2.chars().collect::<Vec<_>>().chunks(40).map(|w| w.iter().collect::<String>()).take(6).collect::<Vec<_>>().join("\n");
-    (result, map)
 }
 
 fn parse(input: &Vec<String>) -> Vec<Option<i32>> {
