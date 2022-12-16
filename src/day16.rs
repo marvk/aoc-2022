@@ -67,39 +67,42 @@ impl Search {
     }
 
     fn search_part_1(&self) -> u32 {
-        Self::start_search(Self::build_nodes(&self.start, &self.adjacency, &self.flow_rates), 30)
+        Self::start_search(Self::build_search_nodes(&self.start, &self.adjacency, &self.flow_rates), 30)
     }
 
-    fn search_part_1_rec(current_node: Rc<SearchNode>, visited: &mut Vec<Rc<SearchNode>>, flow: u32, time_remaining: i32) -> u32 {
+    fn start_search(start: Rc<SearchNode>, time_remaining: i32) -> u32 {
+        Self::search_recursive(start.clone(), &mut vec![start], 0, time_remaining)
+    }
+
+    fn search_recursive(current_node: Rc<SearchNode>, visited: &mut Vec<Rc<SearchNode>>, flow: u32, time_remaining: i32) -> u32 {
         if time_remaining <= 0 {
             return flow;
         }
 
-        let mut best = flow;
+        current_node.neighbours.borrow().iter()
+            .filter_map(move |(neighbour, distance)| {
+                if visited.contains(neighbour) {
+                    return None;
+                }
 
-        for (neighbour, distance) in current_node.neighbours.borrow().iter() {
-            if visited.contains(neighbour) {
-                continue;
-            }
+                let new_time = time_remaining - *distance as i32 - 1;
+                let new_flow = flow + (neighbour.flow_rate * (max(new_time, 0)) as u32);
 
-            let new_time = time_remaining - *distance as i32 - 1;
-            let new_flow = flow + (neighbour.flow_rate * (max(new_time, 0)) as u32);
+                visited.push(neighbour.clone());
 
-            visited.push(neighbour.clone());
+                let result = Self::search_recursive(neighbour.clone(), visited, new_flow, new_time);
 
-            best = max(best, Self::search_part_1_rec(neighbour.clone(), visited, new_flow, new_time));
-
-            visited.remove(visited.len() - 1);
-        }
-
-
-        best
+                visited.remove(visited.len() - 1);
+                Some(result)
+            })
+            .max()
+            .unwrap_or(flow)
     }
 
 
     fn search_part_2(&self) -> u32 {
-        let ranges = self.build_search_ranges();
-
+        // 24 cores go BRRR
+        let ranges = self.build_search_ranges(thread::available_parallelism().unwrap().get());
         let n = ranges.len();
 
         let (tx, rx) = channel();
@@ -115,68 +118,77 @@ impl Search {
             });
         }
 
-        (0..n).map(|_| rx.recv_timeout(Duration::from_secs(u64::MAX)).unwrap()).max().unwrap()
+        (0..n)
+            .map(|_| rx.recv().unwrap())
+            .max()
+            .unwrap()
     }
 
-    fn build_search_ranges(&self) -> Vec<Vec<usize>> {
+    fn build_search_ranges(&self, threads: usize) -> Vec<Vec<usize>> {
         let n = self.adjacency.len();
-        let mut bitsets = (0_usize..(1 << n)).collect::<Vec<_>>();
-        bitsets.shuffle(&mut rand::thread_rng());
+        let bitsets = Self::generate_bitsets(n);
 
-        let threads = thread::available_parallelism().unwrap().get();
         let chunk_size = max(1, (bitsets.len() as f64 / threads as f64).ceil() as usize);
 
-        bitsets.chunks(chunk_size)
+        bitsets
+            .chunks(chunk_size)
             .map(|c| c.into_iter().map(|i| i.clone()).collect::<Vec<_>>())
             .filter(|vec| !vec.is_empty())
             .collect::<Vec<_>>()
     }
 
+    fn generate_bitsets(n: usize) -> Vec<usize> {
+        let mut bitsets = (0_usize..(1 << n)).collect::<Vec<_>>();
+        bitsets.shuffle(&mut rand::thread_rng());
+        bitsets
+    }
+
     fn search_part_2_part(start: String, range: Vec<usize>, adjacency: &HashMap<String, HashMap<String, u32>>, flow_rates: &HashMap<String, u32>) -> u32 {
-        let mut result = 0;
+        let build_nodes = |bitset, zeroes| {
+            let pairs = Self::filter_string_nodes(adjacency.clone(), bitset, zeroes);
+            let associated = Self::associate_string_nodes(pairs);
+            Self::build_search_nodes(&start, &associated, flow_rates)
+        };
 
-        for i in range {
-            // There is just waaay to much cloning and data transformation going on here but I can't be asked to clean this garbage up
+        range.into_iter()
+            .map(|i| {
+                let human = build_nodes(i, false);
+                let elephant = build_nodes(i, true);
 
-            let (human, mut elephant): (_, Vec<_>) = adjacency.clone().into_iter().enumerate().partition(|(j, (name, _))| i & 1 << j != 0 || *name == "AA");
-            // Add AA back into elephant
-            let start_node_for_elephant = adjacency.iter().find(|(u, _)| **u == start).map(|(a, b)| (a.clone(), b.clone())).unwrap();
-            elephant.push((elephant.len(), start_node_for_elephant));
-
-            let human = Self::transform(human);
-            let elephant = Self::transform(elephant);
-
-            let human = Self::build_nodes(&start, &human, flow_rates);
-            let elephant = Self::build_nodes(&start, &elephant, flow_rates);
-
-            let human_score = Self::start_search(human, 26);
-            let elephant_score = Self::start_search(elephant, 26);
-
-            let current = human_score + elephant_score;
-            result = max(result, current);
-        }
-
-        result
+                Self::start_search(human, 26) + Self::start_search(elephant, 26)
+            })
+            .max()
+            .unwrap()
     }
 
-    fn transform(human: Vec<(usize, (String, HashMap<String, u32>))>) -> HashMap<String, HashMap<String, u32>> {
-        let nodes = human.into_iter().map(|(_, pair)| pair).collect::<Vec<_>>();
-        let retain = nodes.iter().map(|(n, _)| n.clone()).chain(vec!["AA".to_string()].into_iter()).collect::<Vec<_>>();
-        nodes.into_iter().map(|(u, mut neighbours)| {
-            neighbours.retain(|v, _| retain.contains(&v));
-            (u, neighbours)
-        }).collect::<HashMap<_, _>>()
+    fn filter_string_nodes(from: HashMap<String, HashMap<String, u32>>, bitset: usize, zeroes: bool) -> Vec<(String, HashMap<String, u32>)> {
+        from.into_iter()
+            .enumerate()
+            .filter(|(j, (name, _))| (bitset & 1 << j == 0) == zeroes || *name == "AA")
+            .map(|(_, node)| node)
+            .collect::<Vec<_>>()
     }
 
+    fn associate_string_nodes(nodes: Vec<(String, HashMap<String, u32>)>) -> HashMap<String, HashMap<String, u32>> {
+        let retain =
+            nodes.iter()
+                .map(|(n, _)| n.clone()).chain(vec!["AA".to_string()].into_iter())
+                .collect::<Vec<_>>();
 
-    fn start_search(start: Rc<SearchNode>, time_remaining: i32) -> u32 {
-        let mut visited = vec![];
-        visited.push(start.clone());
-        Self::search_part_1_rec(start, &mut visited, 0, time_remaining)
+        nodes.into_iter()
+            .map(|(u, mut neighbours)| {
+                neighbours.retain(|v, _| retain.contains(&v));
+                (u, neighbours)
+            })
+            .collect::<HashMap<_, _>>()
     }
 
-    fn build_nodes(start: &String, adjacency: &HashMap<String, HashMap<String, u32>>, flow_rates: &HashMap<String, u32>) -> Rc<SearchNode> {
-        let nodes = flow_rates.iter().map(|(name, flow_rate)| (name.clone(), Rc::new(SearchNode::new(name.clone(), *flow_rate)))).collect::<HashMap<_, _>>();
+    fn build_search_nodes(start: &String, adjacency: &HashMap<String, HashMap<String, u32>>, flow_rates: &HashMap<String, u32>) -> Rc<SearchNode> {
+        let nodes =
+            flow_rates.iter()
+                .map(|(name, flow_rate)| (name.clone(), Rc::new(SearchNode::new(name.clone(), *flow_rate))))
+                .collect::<HashMap<_, _>>();
+
         for (u, adjacent_nodes) in adjacency {
             let current: &SearchNode = nodes[u].borrow();
 
@@ -184,6 +196,7 @@ impl Search {
 
             current.neighbours.replace(map);
         }
+
         nodes[start].clone()
     }
 
@@ -215,33 +228,40 @@ impl Search {
 
         let dist = dist;
 
-        nodes.iter().filter(|(name, n)| *name == "AA" || n.flow_rate > 0).map(|(name, n)| {
-            let mut map = HashMap::new();
+        nodes.iter()
+            .filter(|(name, n)| *name == "AA" || n.flow_rate > 0)
+            .map(|(name, n)| {
+                let mut map = HashMap::new();
 
-            for ((u, v), d) in &dist {
-                if u == n && v.flow_rate != 0 && u != v {
-                    map.insert(v.name.clone(), *d);
+                for ((u, v), d) in &dist {
+                    if u == n && v.flow_rate != 0 && u != v {
+                        map.insert(v.name.clone(), *d);
+                    }
                 }
-            }
 
-            (name.clone(), map)
-        }).collect()
+                (name.clone(), map)
+            })
+            .collect()
     }
 }
 
 fn parse_nodes(input: &Vec<String>) -> HashMap<String, RawNode> {
     let mut neighbours_map = HashMap::new();
 
-    let nodes: HashMap<_, _> = input.iter()
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            let (name, neighbours, flow_rate) = parse_line(line);
-            neighbours_map.insert(name.clone(), neighbours);
-            (name.clone(), flow_rate)
-        })
-        .collect();
+    let nodes: HashMap<_, _> =
+        input.iter()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                let (name, neighbours, flow_rate) = parse_line(line);
+                neighbours_map.insert(name.clone(), neighbours);
+                (name.clone(), flow_rate)
+            })
+            .collect();
 
-    nodes.into_iter().map(|(name, flow_rate)| RawNode::new(name.clone(), flow_rate, neighbours_map[&name].clone())).map(|node| (node.name.clone(), node)).collect::<HashMap<_, _>>()
+    nodes.into_iter()
+        .map(|(name, flow_rate)| RawNode::new(name.clone(), flow_rate, neighbours_map[&name].clone()))
+        .map(|node| (node.name.clone(), node))
+        .collect::<HashMap<_, _>>()
 }
 
 fn parse_line(line: &String) -> (String, Vec<String>, u32) {
