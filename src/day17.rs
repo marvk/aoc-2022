@@ -82,12 +82,14 @@ fn play(directions: Vec<Point>, steps: u64) -> u64 {
     let maybe_cycle =
         (0..steps)
             .find_map(|s| {
-                if let Some(cycle) = map.find_cycle() {
-                    Some((s, cycle))
-                } else {
-                    step();
-                    None
+                // Checking for a cycle is expensive, so only do it every few hundred steps
+                if s % 1000 == 0 {
+                    if let Some(cycle) = map.find_cycle() {
+                        return Some((s, cycle));
+                    }
                 }
+                step();
+                None
             });
 
     if let Some((steps_taken, cycle_height)) = maybe_cycle {
@@ -191,7 +193,7 @@ impl Map {
         let arr = self.raw.borrow();
         let y0 = arr.len() - 1;
 
-        'outer: for cycle_length in (5..(y0 / 4)).rev() {
+        'outer: for cycle_length in (5..(y0 / 3)).rev() {
             for i in 0..cycle_length {
                 let i1 = arr.get(y0 - i)?;
                 let i2 = arr.get(y0 - i - cycle_length)?;
