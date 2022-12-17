@@ -43,7 +43,7 @@ impl<R1: AocResult + 'static, R2: AocResult+ 'static> Day<R1, R2> {
     fn run_part_test<R: AocResult>(&self, id: u8, part: &Box<dyn Part<R>>) -> Duration {
         let (actual, duration) = Self::timed(|| { part.solve(&self.test_input) });
         let expected = part.expect_test();
-        assert_eq!(actual, expected, "Part {} test failed: Expected {:?} but got {:?}", id, expected, actual);
+        assert_eq!(actual, expected, "Part {} test failed after {:?}: Expected {:?} but got {:?}", id, duration, expected, actual);
         println!("{}", format!("Part {} test was {} {:>10}", id, "successful".on_bright_green(), format!("{:?}", duration).purple()));
         duration
     }
