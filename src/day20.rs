@@ -53,22 +53,31 @@ impl EncFile {
         let n_low = (n - 1) as i64;
 
         for i in 0..n {
-            let (old_position, _) = self.raw.iter().enumerate().find(|(_, item)| item.position == i).unwrap();
+            let (old_position, _) =
+                self.raw.iter()
+                    .enumerate()
+                    .find(|(_, item)| item.position == i)
+                    .unwrap();
+
             let enc_number = self.raw.remove(old_position);
-            let new_position = (((old_position as i64 + enc_number.shift) % (n_low) + n_low) % n_low) as usize;
+            let new_position = (((old_position as i64 + enc_number.shift) % n_low + n_low) % n_low) as usize;
 
             self.raw.insert(new_position, enc_number);
         }
     }
 
     fn decrypt(&mut self, key: i64) {
-        for i in 0..self.raw.len() {
-            self.raw[i].shift *= key
-        }
+        self.raw.iter_mut()
+            .for_each(|n| n.shift *= key);
     }
 
     fn decode(&self) -> i64 {
-        let (zero_index, _) = self.raw.iter().enumerate().find(|(_, n)| n.shift == 0).unwrap();
+        let (zero_index, _) =
+            self.raw.iter()
+                .enumerate()
+                .find(|(_, n)| n.shift == 0)
+                .unwrap();
+
         let n = self.raw.len();
 
         [1000, 2000, 3000].into_iter()
