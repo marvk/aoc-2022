@@ -7,113 +7,97 @@ use std::thread;
 use crate::day21::Value::{Operation, Single};
 use crate::harness::{Day, Part};
 
-pub fn day21() -> Day<i128, i128> {
+pub fn day21() -> Day<i64, i64> {
     Day::new(21, Box::new(Part1 {}), Box::new(Part2 {}))
 }
 
 pub struct Part1;
 
-impl Part<i128> for Part1 {
-    fn expect_test(&self) -> i128 {
+impl Part<i64> for Part1 {
+    fn expect_test(&self) -> i64 {
         152
     }
 
-    fn solve(&self, input: &Vec<String>) -> i128 {
+    fn solve(&self, input: &Vec<String>) -> i64 {
         let monkeys = parse_lines(input);
-        let (_, result) = solve_monkeys(monkeys);
 
-        *result.get("root").unwrap()
+        let (_, closed) = solve_monkeys(monkeys);
+
+        *closed.get("root").unwrap()
     }
 }
 
 pub struct Part2;
 
-impl Part<i128> for Part2 {
-    fn expect_test(&self) -> i128 {
-        0
+impl Part<i64> for Part2 {
+    fn expect_test(&self) -> i64 {
+        301
     }
 
-    fn solve(&self, input: &Vec<String>) -> i128 {
+    fn solve(&self, input: &Vec<String>) -> i64 {
         let mut monkeys = parse_lines(input);
-
-        let mut vec = vec![];
-        let mut set = HashSet::new();
-
-        for x in &monkeys {
-            match &x.value {
-                Operation(s1, _, s2) => {
-                    vec.push(s1.clone());
-                    vec.push(s2.clone());
-                    set.insert(s1.clone());
-                    set.insert(s2.clone());
-                }
-                _ => (),
-            }
-        }
-
         monkeys.retain(|monkey| monkey.name != "humn");
 
         let (open, result) = solve_monkeys(monkeys);
 
-        P2Solver::new(open, result).solve()
+        Part2Solver::new(open, result).solve()
     }
 }
 
-struct P2Solver {
+struct Part2Solver {
     open: Vec<Monkey>,
-    closed: HashMap<String, i128>,
+    closed: HashMap<String, i64>,
 }
 
-impl P2Solver {
-    fn find_open(&self, name: &str) -> &Monkey {
-        self.open.iter().find(|m| m.name == name).expect(&format!("Monkey {} not found", name))
-    }
-
-    fn stringify(&self, monkey: &Monkey) -> String {
-        let do_the_thing = |term| {
-            if term == "humn" {
-                "x".to_string()
-            } else {
-                self.closed.get(term).map(|i| i.to_string()).unwrap_or_else(|| self.stringify(self.find_open(term)))
-            }
-        };
-
-        match monkey {
-            Monkey { name, value: Operation(term1, mut op, term2) } => {
-                if name == "root" {
-                    op = '='
-                }
-
-                let left = do_the_thing(term1);
-                let right = do_the_thing(term2);
-
-                format!("({} {} {})", left, op, right)
-            }
-            _ => panic!()
-        }
-    }
-
-    fn solve(&self) -> i128 {
-        for x in &self.open {
-            println!("{:?}", x);
-        }
-
-        let x = self.stringify(self.find_open("root"));
-
-
-        println!("{}", x);
-
-        0
-    }
-}
-
-impl P2Solver {
-    pub fn new(open: Vec<Monkey>, closed: HashMap<String, i128>) -> Self {
+impl Part2Solver {
+    pub fn new(open: Vec<Monkey>, closed: HashMap<String, i64>) -> Self {
         Self { open, closed }
     }
+
+    fn solve(&self) -> i64 {
+        self.solvify(0, self.open.iter().find(|m| m.name == "root"))
+    }
+
+    fn solvify(&self, a: i64, monkey: Option<&Monkey>) -> i64 {
+        match monkey {
+            Some(Monkey { name, value: Operation(term1, op, term2) }) => {
+                let left = self.closed.get(term1);
+                let right = self.closed.get(term2);
+
+                let op = if name == "root" { '=' } else { *op };
+
+                let (new_monkey_name, new_a) = match (left, right) {
+                    (Some(&c), None) => {
+                        (term2, match op {
+                            '+' => a - c,
+                            '-' => c - a,
+                            '*' => a / c,
+                            '/' => c / a,
+                            '=' => c,
+                            _ => panic!()
+                        })
+                    }
+                    (None, Some(&c)) => {
+                        (term1, match op {
+                            '+' => a - c,
+                            '-' => a + c,
+                            '*' => a / c,
+                            '/' => a * c,
+                            '=' => c,
+                            _ => panic!()
+                        })
+                    }
+                    _ => panic!()
+                };
+
+                self.solvify(new_a, self.open.iter().find(|m| m.name == *new_monkey_name))
+            }
+            _ => a
+        }
+    }
 }
 
-fn solve_monkeys(monkeys: Vec<Monkey>) -> (Vec<Monkey>, HashMap<String, i128>) {
+fn solve_monkeys(monkeys: Vec<Monkey>) -> (Vec<Monkey>, HashMap<String, i64>) {
     let mut open = monkeys;
     let mut closed = HashMap::new();
 
@@ -171,19 +155,22 @@ struct Monkey {
     value: Value,
 }
 
-#[derive(Debug, Clone)]
-enum Value {
-    Single(i128),
-    Operation(String, char, String),
+impl FromStr for Monkey {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split(":");
+        let name = split.next().unwrap().to_string();
+        let value = split.next().unwrap().parse().unwrap();
+        Ok(Monkey { name, value })
+    }
 }
 
-impl Value {
-    fn as_operation(&self) -> (String, char, String) {
-        match self {
-            Operation(term1, op, term2) => (term1.clone(), *op, term2.clone()),
-            _ => panic!("Not an operation")
-        }
-    }
+
+#[derive(Debug, Clone)]
+enum Value {
+    Single(i64),
+    Operation(String, char, String),
 }
 
 impl FromStr for Value {
@@ -200,16 +187,5 @@ impl FromStr for Value {
                 split[2].to_string(),
             ))
         }
-    }
-}
-
-impl FromStr for Monkey {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split(":");
-        let name = split.next().unwrap().to_string();
-        let value = split.next().unwrap().parse().unwrap();
-        Ok(Monkey { name, value })
     }
 }
