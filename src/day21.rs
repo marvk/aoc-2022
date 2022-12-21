@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Not;
 use std::str::FromStr;
 use std::sync::mpsc::channel;
@@ -7,20 +7,20 @@ use std::thread;
 use crate::day21::Value::{Operation, Single};
 use crate::harness::{Day, Part};
 
-pub fn day21() -> Day<i64, i64> {
+pub fn day21() -> Day<i128, i128> {
     Day::new(21, Box::new(Part1 {}), Box::new(Part2 {}))
 }
 
 pub struct Part1;
 
-impl Part<i64> for Part1 {
-    fn expect_test(&self) -> i64 {
+impl Part<i128> for Part1 {
+    fn expect_test(&self) -> i128 {
         152
     }
 
-    fn solve(&self, input: &Vec<String>) -> i64 {
+    fn solve(&self, input: &Vec<String>) -> i128 {
         let monkeys = parse_lines(input);
-        let result = solve_monkeys(monkeys);
+        let (_, result) = solve_monkeys(monkeys);
 
         *result.get("root").unwrap()
     }
@@ -28,30 +28,106 @@ impl Part<i64> for Part1 {
 
 pub struct Part2;
 
-impl Part<i64> for Part2 {
-    fn expect_test(&self) -> i64 {
+impl Part<i128> for Part2 {
+    fn expect_test(&self) -> i128 {
         0
     }
 
-    fn solve(&self, input: &Vec<String>) -> i64 {
+    fn solve(&self, input: &Vec<String>) -> i128 {
+        let mut monkeys = parse_lines(input);
+
+        let mut vec = vec![];
+        let mut set = HashSet::new();
+
+        for x in &monkeys {
+            match &x.value {
+                Operation(s1, _, s2) => {
+                    vec.push(s1.clone());
+                    vec.push(s2.clone());
+                    set.insert(s1.clone());
+                    set.insert(s2.clone());
+                }
+                _ => (),
+            }
+        }
+
+        monkeys.retain(|monkey| monkey.name != "humn");
+
+        let (open, result) = solve_monkeys(monkeys);
+
+        P2Solver::new(open, result).solve()
+    }
+}
+
+struct P2Solver {
+    open: Vec<Monkey>,
+    closed: HashMap<String, i128>,
+}
+
+impl P2Solver {
+    fn find_open(&self, name: &str) -> &Monkey {
+        self.open.iter().find(|m| m.name == name).expect(&format!("Monkey {} not found", name))
+    }
+
+    fn stringify(&self, monkey: &Monkey) -> String {
+        let do_the_thing = |term| {
+            if term == "humn" {
+                "x".to_string()
+            } else {
+                self.closed.get(term).map(|i| i.to_string()).unwrap_or_else(|| self.stringify(self.find_open(term)))
+            }
+        };
+
+        match monkey {
+            Monkey { name, value: Operation(term1, mut op, term2) } => {
+                if name == "root" {
+                    op = '='
+                }
+
+                let left = do_the_thing(term1);
+                let right = do_the_thing(term2);
+
+                format!("({} {} {})", left, op, right)
+            }
+            _ => panic!()
+        }
+    }
+
+    fn solve(&self) -> i128 {
+        for x in &self.open {
+            println!("{:?}", x);
+        }
+
+        let x = self.stringify(self.find_open("root"));
+
+
+        println!("{}", x);
+
         0
     }
 }
 
-fn solve_monkeys(monkeys: Vec<Monkey>) -> HashMap<String, i64> {
-    let mut open_monkeys = monkeys;
+impl P2Solver {
+    pub fn new(open: Vec<Monkey>, closed: HashMap<String, i128>) -> Self {
+        Self { open, closed }
+    }
+}
 
-    let mut results = HashMap::new();
+fn solve_monkeys(monkeys: Vec<Monkey>) -> (Vec<Monkey>, HashMap<String, i128>) {
+    let mut open = monkeys;
+    let mut closed = HashMap::new();
 
-    while open_monkeys.is_empty().not() {
-        open_monkeys.retain(|monkey| {
+    while open.is_empty().not() {
+        let before_len = open.len();
+
+        open.retain(|monkey| {
             match &monkey.value {
                 Single(value) => {
-                    results.insert(monkey.name.clone(), *value);
+                    closed.insert(monkey.name.clone(), *value);
                     false
                 }
                 Operation(term1, op, term2) => {
-                    match (results.get(term1), results.get(term2)) {
+                    match (closed.get(term1), closed.get(term2)) {
                         (Some(term1), Some(term2)) => {
                             let insert = match op {
                                 '+' => term1 + term2,
@@ -64,18 +140,22 @@ fn solve_monkeys(monkeys: Vec<Monkey>) -> HashMap<String, i64> {
                                 }
                             };
 
-                            results.insert(monkey.name.clone(), insert);
+                            closed.insert(monkey.name.clone(), insert);
 
                             false
                         }
-                        _ => { true }
+                        _ => true
                     }
                 }
             }
         });
+
+        if open.len() == before_len {
+            break;
+        }
     }
 
-    results
+    (open, closed)
 }
 
 fn parse_lines(input: &Vec<String>) -> Vec<Monkey> {
@@ -93,7 +173,7 @@ struct Monkey {
 
 #[derive(Debug, Clone)]
 enum Value {
-    Single(i64),
+    Single(i128),
     Operation(String, char, String),
 }
 
