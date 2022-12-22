@@ -67,7 +67,7 @@ fn parse_input(input: &Vec<String>) -> (Vec<Vec<char>>, Vec<Instruction>) {
 }
 
 fn parse_instructions(line: &str) -> Vec<Instruction> {
-    let mut current = "".to_string();
+    let mut current = String::new();
     let mut result = vec![];
 
     for char in line.chars() {
@@ -81,7 +81,7 @@ fn parse_instructions(line: &str) -> Vec<Instruction> {
             };
             result.push(Walk(current.parse().unwrap()));
             result.push(Turn(direction));
-            current = "".to_string();
+            current = String::new();
         }
     }
 
@@ -97,6 +97,7 @@ trait Map {
     fn width(&self) -> usize;
     fn find_neighbour(&self, start: Point, direction: Point) -> (Point, char, Point);
     fn get(&self, point: Point) -> Option<char>;
+
     fn find_first_map_position(&self, start: Point, direction: Point) -> (Point, char) {
         let mut current = start;
 
@@ -131,6 +132,7 @@ impl Map for RegularMap {
 
     fn find_neighbour(&self, start: Point, direction: Point) -> (Point, char, Point) {
         let point = start + direction;
+
         if let Some(result) = self.get(point) {
             (point, result, direction)
         } else {
@@ -153,7 +155,7 @@ impl Map for RegularMap {
             .map(|row| row.get(point.x as usize))
             .flatten()
             .filter(|&&tile| tile != ' ')
-            .map(|char| *char)
+            .copied()
     }
 }
 
@@ -173,7 +175,7 @@ impl CubeMap {
     }
 
     fn build_raw_faces(raw: &Vec<Vec<char>>) -> (HashMap<Point, Vec<Vec<char>>>, usize) {
-        let total_area = raw.iter().flat_map(|row| row.iter()).filter(|&&c| c != ' ').count();
+        let total_area = raw.iter().flatten().filter(|&&c| c != ' ').count();
         let face_area = total_area / 6;
         let edge_length = (face_area as f64).sqrt() as usize;
 
@@ -185,21 +187,21 @@ impl CubeMap {
         for y in (0..raw_height).step_by(edge_length) {
             for x in (0..raw_width).step_by(edge_length) {
                 if raw[y][x] != ' ' {
-                    let grid_position = p((x / edge_length) as i32, (y / edge_length) as i32);
+                    let grid_position = p(x as i32, y as i32) / edge_length as i32;
 
-                    let mut raw_cube = vec![];
+                    let mut face = vec![];
 
                     for y_cube in 0..edge_length {
-                        let mut current_cube = vec![];
+                        let mut row = vec![];
 
                         for x_cube in 0..edge_length {
-                            current_cube.push(raw[y + y_cube][x + x_cube]);
+                            row.push(raw[y + y_cube][x + x_cube]);
                         }
 
-                        raw_cube.push(current_cube);
+                        face.push(row);
                     }
 
-                    raw_faces.insert(grid_position, raw_cube);
+                    raw_faces.insert(grid_position, face);
                 }
             }
         }
@@ -224,7 +226,7 @@ impl CubeMap {
                 let raw_origin = face_grid_position * edge_length as i32;
                 let face_direction = Up;
                 let neighbours = face_direction.clockwise_neighbours();
-                let neighbour_faces = ORTHOGONAL_DIRECTIONS.iter().enumerate().map(|(i, d)| (*d, neighbours[i])).collect();
+                let neighbour_faces = ORTHOGONAL_DIRECTIONS.iter().enumerate().map(|(i, &d)| (d, neighbours[i])).collect();
                 Face::new(raw, raw_origin, face_grid_position, face_direction, neighbour_faces)
             } else {
                 if let Some(raw) = raw_faces.get(&face_grid_position) {
@@ -236,7 +238,7 @@ impl CubeMap {
                 }
             };
 
-            ORTHOGONAL_DIRECTIONS.iter().map(|d| face.face_grid_position + *d).for_each(|p| open_list.push_back(p));
+            open_list.extend(ORTHOGONAL_DIRECTIONS.iter().map(|&d| face.face_grid_position + d));
             faces.push(face);
         }
 
@@ -246,16 +248,17 @@ impl CubeMap {
     fn orient_face_and_build_neighbours(faces: &Vec<Face>, face_grid_position: Point) -> (FaceDirection, HashMap<Point, FaceDirection>) {
         let (neighbour_direction, face_neighbour) =
             ORTHOGONAL_DIRECTIONS.iter()
-                .map(|d| (*d, face_grid_position + *d))
-                .map(|(d, p)| (d, faces.iter().find(|face| face.face_grid_position == p)))
-                .find(|(_, f)| f.is_some())
-                .map(|(d, f)| (d, f.unwrap()))
+                .find_map(|&d|
+                    faces.iter()
+                        .find(|f| f.face_grid_position == face_grid_position + d)
+                        .map(|f| (d, f))
+                )
                 .unwrap();
 
         let face = face_neighbour.neighbour_faces[&-neighbour_direction];
 
         let neighbours = face.clockwise_neighbours();
-        let start_index = neighbours.iter().enumerate().find(|(_, d)| **d == face_neighbour.face_direction).map(|(i, _)| i).unwrap();
+        let start_index = neighbours.iter().enumerate().find(|(_, &d)| d == face_neighbour.face_direction).map(|(i, _)| i).unwrap();
 
         let map =
             (start_index..(start_index + 4))
@@ -301,19 +304,21 @@ impl Map for CubeMap {
         } else {
             let from_face = self.get_face_by_point(start);
             let to_face = self.get_face(from_face.neighbour_faces[&direction]);
-            let required_direction_opposite = *to_face.neighbour_faces.iter().find(|(_, v)| **v == from_face.face_direction).map(|(d, _)| d).unwrap();
-            let required_direction = Anticlockwise.apply(Anticlockwise.apply(required_direction_opposite));
+            let required_direction_opposite = to_face.neighbour_faces.iter().find(|(_, &f)| f == from_face.face_direction).map(|(&d, _)| d).unwrap();
+            let required_direction = -required_direction_opposite;
 
             let start_on_face = start - from_face.raw_origin;
             let mut current_direction = direction;
             let mut current_position = start_on_face;
 
+            let offset_length = self.edge_length as i32 - 1;
+
             while current_direction != required_direction {
                 current_direction = Anticlockwise.apply(current_direction);
-                current_position = Anticlockwise.apply(current_position) + p(0, self.edge_length as i32 - 1);
+                current_position = Anticlockwise.apply(current_position) + Point::SOUTH * offset_length;
             }
 
-            let final_destination = to_face.raw_origin + current_position - required_direction * (self.edge_length as i32 - 1);
+            let final_destination = current_position + to_face.raw_origin - required_direction * offset_length;
             let final_direction = required_direction;
 
             (final_destination, self.get(final_destination).unwrap(), final_direction)
@@ -326,7 +331,7 @@ impl Map for CubeMap {
             .map(|row| row.get(point.x as usize))
             .flatten()
             .filter(|&&tile| tile != ' ')
-            .map(|char| *char)
+            .copied()
     }
 }
 
