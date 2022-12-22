@@ -1,12 +1,12 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use FaceDirection::{Back, Down, Front, Left, Right, Up};
 use Instruction::{Turn, Walk};
+use Rotation::{Anticlockwise, Clockwise};
 
-use crate::day22::Rotation::{Anticlockwise, Clockwise};
 use crate::harness::{Day, Part};
 
 pub fn day22() -> Day<u32, u32> {
@@ -167,14 +167,14 @@ struct CubeMap {
 
 impl CubeMap {
     pub fn new(raw: Vec<Vec<char>>) -> Self {
-        let (raw_faces, edge_length) = Self::build_raw_faces(&raw);
+        let (face_origins, edge_length) = Self::build_raw_faces(&raw);
 
-        let faces = Self::build_faces(raw_faces, edge_length);
+        let faces = Self::build_faces(face_origins, edge_length);
 
         Self { raw, faces, edge_length }
     }
 
-    fn build_raw_faces(raw: &Vec<Vec<char>>) -> (HashMap<Point, Vec<Vec<char>>>, usize) {
+    fn build_raw_faces(raw: &Vec<Vec<char>>) -> (Vec<Point>, usize) {
         let total_area = raw.iter().flatten().filter(|&&c| c != ' ').count();
         let face_area = total_area / 6;
         let edge_length = (face_area as f64).sqrt() as usize;
@@ -182,38 +182,21 @@ impl CubeMap {
         let raw_width = raw[0].len();
         let raw_height = raw.len();
 
-        let mut raw_faces: HashMap<Point, Vec<Vec<char>>> = HashMap::new();
+        let map =
+            (0..raw_height).step_by(edge_length)
+                .flat_map(|y| (0..raw_width).step_by(edge_length).map(move |x| (x, y)))
+                .filter(|&(x, y)| raw[y][x] != ' ')
+                .map(|(x, y)| p(x as i32, y as i32) / edge_length as i32)
+                .collect();
 
-        for y in (0..raw_height).step_by(edge_length) {
-            for x in (0..raw_width).step_by(edge_length) {
-                if raw[y][x] != ' ' {
-                    let grid_position = p(x as i32, y as i32) / edge_length as i32;
-
-                    let mut face = vec![];
-
-                    for y_cube in 0..edge_length {
-                        let mut row = vec![];
-
-                        for x_cube in 0..edge_length {
-                            row.push(raw[y + y_cube][x + x_cube]);
-                        }
-
-                        face.push(row);
-                    }
-
-                    raw_faces.insert(grid_position, face);
-                }
-            }
-        }
-
-        (raw_faces, edge_length)
+        (map, edge_length)
     }
 
-    fn build_faces(raw_faces: HashMap<Point, Vec<Vec<char>>>, edge_length: usize) -> Vec<Face> {
+    fn build_faces(face_origins: Vec<Point>, edge_length: usize) -> Vec<Face> {
         let mut faces: Vec<Face> = vec![];
 
         let mut open_list = VecDeque::new();
-        open_list.push_back(*raw_faces.keys().next().unwrap());
+        open_list.push_back(*face_origins.iter().next().unwrap());
 
         while let Some(face_grid_position) = open_list.pop_back() {
             if faces.iter().any(|f| f.face_grid_position == face_grid_position) {
@@ -222,17 +205,16 @@ impl CubeMap {
 
             let face = if faces.is_empty() {
                 // Handling first face
-                let raw = raw_faces[&face_grid_position].clone();
                 let raw_origin = face_grid_position * edge_length as i32;
                 let face_direction = Up;
                 let neighbours = face_direction.clockwise_neighbours();
                 let neighbour_faces = ORTHOGONAL_DIRECTIONS.iter().enumerate().map(|(i, &d)| (d, neighbours[i])).collect();
-                Face::new(raw, raw_origin, face_grid_position, face_direction, neighbour_faces)
+                Face::new(raw_origin, face_grid_position, face_direction, neighbour_faces)
             } else {
-                if let Some(raw) = raw_faces.get(&face_grid_position) {
+                if face_origins.contains(&face_grid_position) {
                     let (face, neighbours) = Self::orient_face_and_build_neighbours(&mut faces, face_grid_position);
 
-                    Face::new(raw.clone(), face_grid_position * edge_length as i32, face_grid_position, face, neighbours)
+                    Face::new(face_grid_position * edge_length as i32, face_grid_position, face, neighbours)
                 } else {
                     continue;
                 }
@@ -336,7 +318,6 @@ impl Map for CubeMap {
 }
 
 struct Face {
-    raw: Vec<Vec<char>>,
     raw_origin: Point,
     face_grid_position: Point,
     face_direction: FaceDirection,
@@ -344,8 +325,8 @@ struct Face {
 }
 
 impl Face {
-    pub fn new(raw: Vec<Vec<char>>, raw_origin: Point, face_grid_position: Point, face_direction: FaceDirection, neighbour_faces: HashMap<Point, FaceDirection>) -> Self {
-        Self { raw, raw_origin, face_grid_position, face_direction, neighbour_faces }
+    pub fn new(raw_origin: Point, face_grid_position: Point, face_direction: FaceDirection, neighbour_faces: HashMap<Point, FaceDirection>) -> Self {
+        Self { raw_origin, face_grid_position, face_direction, neighbour_faces }
     }
 }
 
