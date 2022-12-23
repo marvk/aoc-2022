@@ -22,7 +22,7 @@ impl Part<u32> for Part1 {
 
         result.spread(10);
 
-        result.count()
+        result.count_empty()
     }
 }
 
@@ -36,34 +36,12 @@ impl Part<u32> for Part2 {
     fn solve(&self, input: &Vec<String>) -> u32 {
         let result = Map::from(input);
 
-
         result.spread(usize::MAX) as u32
     }
 }
 
 struct Map {
     raw: RefCell<HashSet<Point>>,
-}
-
-impl Debug for Map {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let (min, max) = self.extremes();
-
-        let mut result = String::new();
-
-        for y in min.y..=max.y {
-            for x in min.x..=max.x {
-                if let None = self.raw.borrow().get(&p(x, y)) {
-                    result.push('.');
-                } else {
-                    result.push('#');
-                }
-            }
-            result.push('\n');
-        }
-
-        write!(f, "{}", result)
-    }
 }
 
 impl Map {
@@ -80,7 +58,7 @@ impl Map {
         (p(min_x, min_y), p(max_x, max_y))
     }
 
-    pub fn count(&self) -> u32 {
+    pub fn count_empty(&self) -> u32 {
         let (min, max) = self.extremes();
 
         let mut sum = 0;
@@ -96,98 +74,71 @@ impl Map {
         sum
     }
 
-    pub fn spread(&self, max: usize) -> usize {
-        // println!("{:?}", self);
-        // println!("---");
+    pub fn spread(&self, max_iterations: usize) -> usize {
         let mut current = self.raw.replace(HashSet::new());
 
-        let mut considerations = build_initial_considerations();
+        let mut proposals = build_initial_proposals();
 
-        let mut considered_moves: HashMap<Point, Point> = HashMap::new();
-        let mut considered_targets = HashSet::new();
-        let mut blocked_moves: HashSet<Point> = HashSet::new();
-        let mut static_elves = HashSet::new();
-
+        let mut moves = HashMap::new();
+        let mut targets = HashSet::new();
+        let mut blocked_targets = HashSet::new();
 
         let mut i = 0;
         loop {
-            i+=1;
-            if (i - 1) == max {
+            if i == max_iterations {
                 break;
             }
-            // println!("FIRST: {:?}", considerations.front().unwrap().direction);
+
+            i += 1;
 
             for &elf in &current {
-                let considered_considerations = considerations.iter()
-                    .filter(|c|
-                        c.checks.iter()
-                            .all(|&d| !current.contains(&(elf + d)))
-                    )
-                    .collect::<Vec<_>>();
+                let considered_proposals =
+                    proposals.iter()
+                        .filter(|c|
+                            c.checks.iter()
+                                .all(|&d| !current.contains(&(elf + d)))
+                        )
+                        .collect::<Vec<_>>();
 
-                if considered_considerations.len() == 4 {
-                    static_elves.insert(elf);
+                if considered_proposals.len() == 4 {
+                    moves.insert(elf, elf);
                     continue;
                 }
 
-                if let Some(consideration) = considered_considerations.first() {
-                    let target = elf + consideration.direction;
+                if let Some(proposal) = considered_proposals.first() {
+                    let target = elf + proposal.direction;
 
-                    if considered_targets.contains(&target) {
-                        blocked_moves.insert(target);
+                    if targets.contains(&target) {
+                        blocked_targets.insert(target);
                     } else {
-                        considered_targets.insert(target);
+                        targets.insert(target);
                     }
-                    considered_moves.insert(elf, target);
+                    moves.insert(elf, target);
                 } else {
-                    static_elves.insert(elf);
+                    moves.insert(elf, elf);
                 }
             }
 
-            // for x in &considered_moves {
-            //     println!("{:?}", x);
-            // }
-            // println!("---");
-            //
-            // for x in &blocked_moves {
-            //     println!("{:?}", x);
-            // }
-            // println!("---");
-
-            if considered_targets.is_empty() {
+            if targets.is_empty() {
                 break;
             }
 
             current.clear();
 
-
-            for (&from, &to) in &considered_moves {
-                if blocked_moves.contains(&to) {
-                    current.insert(from);
+            for (from, to) in &moves {
+                if blocked_targets.contains(to) {
+                    current.insert(*from);
                 } else {
-                    current.insert(to);
+                    current.insert(*to);
                 }
             }
-            for &x in &static_elves {
-                current.insert(x);
-            }
 
-            // for x in &current {
-            //     println!("{:?}", x);
-            // }
+            moves.clear();
+            targets.clear();
+            blocked_targets.clear();
 
-            static_elves.clear();
-            considered_targets.clear();
-            considered_moves.clear();
-            blocked_moves.clear();
-            let front = considerations.pop_front().unwrap();
-            considerations.push_back(front);
-            self.raw.replace(current);
-
-            // println!("---");
-            // println!("{:?}", self);
-
-            current = self.raw.replace(HashSet::new())
+            let front = proposals.pop_front().unwrap();
+            proposals.push_back(front);
         }
 
         self.raw.replace(current);
@@ -196,21 +147,21 @@ impl Map {
     }
 }
 
-fn build_initial_considerations() -> VecDeque<Consideration> {
+fn build_initial_proposals() -> VecDeque<Proposal> {
     let mut result = VecDeque::new();
-    result.push_back(Consideration::new(Point::NORTH, [Point::NORTH, Point::NORTH_EAST, Point::NORTH_WEST]));
-    result.push_back(Consideration::new(Point::SOUTH, [Point::SOUTH, Point::SOUTH_EAST, Point::SOUTH_WEST]));
-    result.push_back(Consideration::new(Point::WEST, [Point::WEST, Point::NORTH_WEST, Point::SOUTH_WEST]));
-    result.push_back(Consideration::new(Point::EAST, [Point::EAST, Point::NORTH_EAST, Point::SOUTH_EAST]));
+    result.push_back(Proposal::new(Point::NORTH, [Point::NORTH, Point::NORTH_EAST, Point::NORTH_WEST]));
+    result.push_back(Proposal::new(Point::SOUTH, [Point::SOUTH, Point::SOUTH_EAST, Point::SOUTH_WEST]));
+    result.push_back(Proposal::new(Point::WEST, [Point::WEST, Point::NORTH_WEST, Point::SOUTH_WEST]));
+    result.push_back(Proposal::new(Point::EAST, [Point::EAST, Point::NORTH_EAST, Point::SOUTH_EAST]));
     result
 }
 
-struct Consideration {
+struct Proposal {
     direction: Point,
     checks: [Point; 3],
 }
 
-impl Consideration {
+impl Proposal {
     pub fn new(direction: Point, checks: [Point; 3]) -> Self {
         Self { direction, checks }
     }
@@ -218,16 +169,17 @@ impl Consideration {
 
 impl From<&Vec<String>> for Map {
     fn from(value: &Vec<String>) -> Self {
-        let raw = value.iter()
-            .filter(|line| !line.is_empty())
-            .enumerate()
-            .flat_map(|(y, row)|
-                row.chars()
-                    .enumerate()
-                    .filter(|&(_, cell)| cell == '#')
-                    .map(move |(x, _)| (x, y)))
-            .map(|(x, y)| p(x as i32, y as i32))
-            .collect();
+        let raw =
+            value.iter()
+                .filter(|line| !line.is_empty())
+                .enumerate()
+                .flat_map(|(y, row)|
+                    row.chars()
+                        .enumerate()
+                        .filter(|&(_, cell)| cell == '#')
+                        .map(move |(x, _)| (x, y)))
+                .map(|(x, y)| p(x as i32, y as i32))
+                .collect();
 
         Map::new(raw)
     }
@@ -251,44 +203,7 @@ impl Add<Point> for Point {
     }
 }
 
-impl Sub<Point> for Point {
-    type Output = Self;
-
-    fn sub(self, rhs: Point) -> Self::Output {
-        p(self.x - rhs.x, self.y - rhs.y)
-    }
-}
-
-impl Neg for Point {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        p(-self.x, -self.y)
-    }
-}
-
-impl Mul<i32> for Point {
-    type Output = Point;
-
-    fn mul(self, rhs: i32) -> Self::Output {
-        p(self.x * rhs, self.y * rhs)
-    }
-}
-
-
-impl Div<i32> for Point {
-    type Output = Point;
-
-    fn div(self, rhs: i32) -> Self::Output {
-        p(self.x / rhs, self.y / rhs)
-    }
-}
-
-const ORTHOGONAL_DIRECTIONS: [Point; 4] = [Point::NORTH, Point::EAST, Point::SOUTH, Point::WEST];
-const CARDINAL_DIRECTIONS: [Point; 8] = [Point::NORTH, Point::NORTH_EAST, Point::EAST, Point::SOUTH_EAST, Point::SOUTH, Point::SOUTH_WEST, Point::WEST, Point::NORTH_WEST];
-
 impl Point {
-    const ZERO: Self = p(0, 0);
     const NORTH: Self = p(0, -1);
     const NORTH_EAST: Self = p(1, -1);
     const EAST: Self = p(1, 0);
