@@ -239,27 +239,32 @@ impl CubeMap {
 
         let face = face_neighbour.neighbour_faces[&-neighbour_direction];
 
-        let neighbours = face.clockwise_neighbours();
-        let start_index = neighbours.iter().enumerate().find(|(_, &d)| d == face_neighbour.face_direction).map(|(i, _)| i).unwrap();
+        let clockwise_neighbours = face.clockwise_neighbours();
+        let start_index =
+            clockwise_neighbours.iter()
+                .enumerate()
+                .find(|(_, &d)| d == face_neighbour.face_direction)
+                .map(|(i, _)| i)
+                .unwrap();
 
-        let map =
-            (start_index..(start_index + 4))
+        let neighbours =
+            (start_index..(start_index + clockwise_neighbours.len()))
                 .map(|i| {
                     let mut direction = neighbour_direction;
                     for _ in start_index..i {
                         direction = Clockwise.apply(direction);
                     }
-                    let face_direction = neighbours[i % 4];
+                    let face_direction = clockwise_neighbours[i % clockwise_neighbours.len()];
                     (direction, face_direction)
                 })
-                .collect::<HashMap<_, _>>();
+                .collect();
 
-        (face, map)
+        (face, neighbours)
     }
 
     fn get_face_by_point(&self, point: Point) -> &Face {
         self.faces.iter()
-            .find(|face| face.raw_origin == (point / self.edge_length as i32) * self.edge_length as i32)
+            .find(|face| face.face_grid_position == point / self.edge_length as i32)
             .unwrap()
     }
 
@@ -286,8 +291,11 @@ impl Map for CubeMap {
         } else {
             let from_face = self.get_face_by_point(start);
             let to_face = self.get_face(from_face.neighbour_faces[&direction]);
-            let required_direction_opposite = to_face.neighbour_faces.iter().find(|(_, &f)| f == from_face.face_direction).map(|(&d, _)| d).unwrap();
-            let required_direction = -required_direction_opposite;
+            let required_direction =
+                -to_face.neighbour_faces.iter()
+                    .find(|(_, &f)| f == from_face.face_direction)
+                    .map(|(&d, _)| d)
+                    .unwrap();
 
             let start_on_face = start - from_face.raw_origin;
             let mut current_direction = direction;
@@ -375,17 +383,18 @@ impl Solver {
 
     fn walk(&self, length: usize) {
         for _ in 0..length {
-            let (new_point, tile, new_direction) = self.map.find_neighbour(*self.position.borrow(), *self.direction.borrow());
-            if tile != '#' {
-                self.position.replace(new_point);
+            let (new_position, tile, new_direction) = self.map.find_neighbour(*self.position.borrow(), *self.direction.borrow());
+            if tile == '#' {
+                break;
+            } else {
+                self.position.replace(new_position);
                 self.direction.replace(new_direction);
             }
         }
     }
 
     fn rotate(&self, rotation: Rotation) {
-        let direction = *self.direction.borrow();
-        self.direction.replace(rotation.apply(direction));
+        self.direction.replace_with(|p| rotation.apply(*p));
     }
 
     fn score(&self) -> u32 {
@@ -443,16 +452,15 @@ impl Neg for Point {
 }
 
 impl Mul<i32> for Point {
-    type Output = Point;
+    type Output = Self;
 
     fn mul(self, rhs: i32) -> Self::Output {
         p(self.x * rhs, self.y * rhs)
     }
 }
 
-
 impl Div<i32> for Point {
-    type Output = Point;
+    type Output = Self;
 
     fn div(self, rhs: i32) -> Self::Output {
         p(self.x / rhs, self.y / rhs)
