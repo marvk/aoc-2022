@@ -33,7 +33,7 @@ use crate::day20::day20;
 use crate::day21::day21;
 use crate::day22::day22;
 use crate::day23::day23;
-// use crate::day24::day24;
+use crate::day24::day24;
 // use crate::day25::day25;
 use crate::harness::{AocResult, Day};
 
@@ -61,7 +61,7 @@ mod day20;
 mod day21;
 mod day22;
 mod day23;
-// mod day24;
+mod day24;
 // mod day25;
 
 fn main() {
@@ -89,7 +89,7 @@ fn main() {
         day21().f(),
         day22().f(),
         day23().f(),
-        // day24().f(),
+        day24().f(),
         // day25().f(),
     ];
 
