@@ -57,16 +57,10 @@ impl Part<u32> for Part2 {
 
 const MOVEMENT_OPTIONS: [Point; 5] = [Point::EAST, Point::SOUTH, Point::ZERO, Point::NORTH, Point::WEST];
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 struct SearchState {
     minutes_passed: usize,
     position: Point,
-}
-
-impl Debug for SearchState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, ({},{}))", self.minutes_passed, self.position.x, self.position.y)
-    }
 }
 
 impl PartialOrd<Self> for SearchState {
@@ -83,21 +77,21 @@ impl SearchState {
 
 impl Ord for SearchState {
     fn cmp(&self, other: &Self) -> Ordering {
+        let time_order = self.minutes_passed.cmp(&other.minutes_passed).reverse();
         let x_order = self.position.x.cmp(&other.position.x);
         let y_order = self.position.y.cmp(&other.position.y);
-        let time_order = self.minutes_passed.cmp(&other.minutes_passed).reverse();
 
         time_order.then(x_order).then(y_order)
     }
 }
 
 fn search_iter(map: &Map, start: Point, target: Point, minutes_passed: usize) -> Option<usize> {
-    let mut open: BinaryHeap<SearchState> = BinaryHeap::new();
-    let mut closed: HashSet<SearchState> = HashSet::new();
+    let mut open = BinaryHeap::new();
+    let mut closed = HashSet::new();
 
     open.push(SearchState::new(minutes_passed, start));
 
-    let mut best: Option<usize> = None;
+    let mut best = None;
 
     while let Some(state) = open.pop() {
         let SearchState { minutes_passed, position } = state;
@@ -137,19 +131,19 @@ fn search_iter(map: &Map, start: Point, target: Point, minutes_passed: usize) ->
 struct Map {
     raw: Vec<Vec<char>>,
     blizzards: RefCell<Vec<Rc<Vec<Blizzard>>>>,
-    blizzards_set: RefCell<Vec<Rc<HashSet<Point>>>>,
+    blizzards_positions: RefCell<Vec<Rc<HashSet<Point>>>>,
     min: Point,
     max: Point,
 }
 
 impl Map {
     pub fn new(raw: Vec<Vec<char>>, blizzard: Vec<Blizzard>, min: Point, max: Point) -> Self {
-        let blizzard_set: HashSet<Point> = blizzard.iter().map(|b| b.position).collect();
+        let blizzards_positions = blizzard.iter().map(|b| b.position).collect();
 
         Self {
             raw,
             blizzards: RefCell::new(vec![Rc::new(blizzard)]),
-            blizzards_set: RefCell::new(vec![Rc::new(blizzard_set)]),
+            blizzards_positions: RefCell::new(vec![Rc::new(blizzards_positions)]),
             min,
             max,
         }
@@ -172,22 +166,30 @@ impl Map {
     }
 
     fn is_wall(&self, position: Point) -> bool {
-        if let Some('.') = self.raw.get(position.y as usize).map(|row| row.get(position.x as usize)).flatten() {
+        if let Some('.') = self.get(position) {
             false
         } else {
             true
         }
     }
 
+    fn get(&self, position: Point) -> Option<char> {
+        self.raw.get(position.y as usize)
+            .map(|row| row.get(position.x as usize))
+            .flatten()
+            .copied()
+    }
+
     fn blizzards_at(&self, minute: usize) -> Rc<HashSet<Point>> {
         let n_blizzards = self.blizzards.borrow().len();
+
         for i in n_blizzards..=minute {
             let current_blizzard = self.step_blizzard(self.blizzards.borrow()[i - 1].as_ref());
-            self.blizzards_set.borrow_mut().insert(i, Rc::new(current_blizzard.iter().map(|b| b.position).collect()));
+            self.blizzards_positions.borrow_mut().insert(i, Rc::new(current_blizzard.iter().map(|b| b.position).collect()));
             self.blizzards.borrow_mut().insert(i, Rc::new(current_blizzard));
         }
 
-        self.blizzards_set.borrow()[minute].clone()
+        self.blizzards_positions.borrow()[minute].clone()
     }
 
     fn step_blizzard(&self, blizzards: &Vec<Blizzard>) -> Vec<Blizzard> {
@@ -212,7 +214,7 @@ impl From<&Vec<String>> for Map {
     fn from(value: &Vec<String>) -> Self {
         let mut blizzard = vec![];
 
-        let raw: Vec<Vec<_>> =
+        let raw =
             value.iter()
                 .filter(|line| !line.is_empty())
                 .enumerate()
@@ -236,7 +238,7 @@ impl From<&Vec<String>> for Map {
                         })
                         .collect()
                 )
-                .collect();
+                .collect::<Vec<Vec<_>>>();
 
         let min = p(0, 0);
         let max = p(raw[0].len() as i32 - 1, raw.len() as i32 - 1);
