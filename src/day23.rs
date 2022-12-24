@@ -75,7 +75,7 @@ impl Map {
     }
 
     pub fn spread(&self, max_iterations: usize) -> usize {
-        let mut current = self.raw.replace(HashSet::new());
+        let mut current = self.raw.borrow_mut();
 
         let mut proposals = build_initial_proposals();
 
@@ -83,15 +83,15 @@ impl Map {
         let mut targets = HashSet::new();
         let mut blocked_targets = HashSet::new();
 
-        let mut i = 0;
+        let mut iterations = 0;
         loop {
-            if i == max_iterations {
+            if iterations == max_iterations {
                 break;
             }
 
-            i += 1;
+            iterations += 1;
 
-            for &elf in &current {
+            for &elf in current.iter() {
                 let considered_proposals =
                     proposals.iter()
                         .filter(|c|
@@ -137,13 +137,10 @@ impl Map {
             targets.clear();
             blocked_targets.clear();
 
-            let front = proposals.pop_front().unwrap();
-            proposals.push_back(front);
+            proposals.rotate_left(1);
         }
 
-        self.raw.replace(current);
-
-        i
+        iterations
     }
 }
 
