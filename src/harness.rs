@@ -1,18 +1,33 @@
 #![allow(dead_code)]
 
-use std::fmt::Debug;
+use std::cmp::max;
+use std::fmt::{Debug, Display, Formatter};
 use std::fs;
 use std::time::{Duration, Instant};
 
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 
-pub trait AocResult: Debug + PartialEq {}
+pub trait AocResult: Display + Debug + PartialEq {}
 
-impl<T: Debug + PartialEq> AocResult for T {}
+impl<T: Display + Debug + PartialEq> AocResult for T {}
 
 pub trait Part<R: AocResult> {
     fn expect_test(&self) -> R;
     fn solve(&self, input: &Vec<String>) -> R;
+}
+
+pub struct EmptyPart {}
+
+const NOT_IMPLEMENTED: &str = "NOT_IMPLEMENTED";
+
+impl Part<String> for EmptyPart {
+    fn expect_test(&self) -> String {
+        NOT_IMPLEMENTED.to_string()
+    }
+
+    fn solve(&self, _: &Vec<String>) -> String {
+        NOT_IMPLEMENTED.to_string()
+    }
 }
 
 pub struct Day<R1: AocResult, R2: AocResult> {
@@ -23,7 +38,7 @@ pub struct Day<R1: AocResult, R2: AocResult> {
     part2: Box<dyn Part<R2>>,
 }
 
-impl<R1: AocResult + 'static, R2: AocResult+ 'static> Day<R1, R2> {
+impl<R1: AocResult + 'static, R2: AocResult + 'static> Day<R1, R2> {
     pub fn new(id: u8, part1: Box<dyn Part<R1>>, part2: Box<dyn Part<R2>>) -> Self {
         Self {
             id,
@@ -41,16 +56,39 @@ impl<R1: AocResult + 'static, R2: AocResult+ 'static> Day<R1, R2> {
     }
 
     fn run_part_test<R: AocResult>(&self, id: u8, part: &Box<dyn Part<R>>) -> Duration {
+        if part.expect_test().to_string() == NOT_IMPLEMENTED {
+            return Duration::ZERO;
+        }
         let (actual, duration) = Self::timed(|| { part.solve(&self.test_input) });
         let expected = part.expect_test();
-        assert_eq!(actual, expected, "Part {} test failed after {:?}: Expected {:?} but got {:?}", id, duration, expected, actual);
-        println!("{}", format!("Part {} test was {} {:>10}", id, "successful".on_bright_green(), format!("{:?}", duration).purple()));
+        assert_eq!(actual, expected, "Part {} test failed after {:?}: Expected {} but got {}", id, duration, expected, actual);
+        println!("{}", format!("Part {} test        {} {:>10}", id, "successful".on_bright_green(), format!("{:?}", duration).purple()));
         duration
     }
 
     fn run_part_actual<R: AocResult>(&self, id: u8, part: &Box<dyn Part<R>>) -> Duration {
+        if part.expect_test().to_string() == NOT_IMPLEMENTED {
+            return Duration::ZERO;
+        }
         let (actual, duration) = Self::timed(|| { part.solve(&self.actual_input) });
-        println!("{}", format!("Part {} output {:>12} {:>10}", id, format!("{:?}", actual).blue(), format!("{:?}", duration).purple()).on_blue());
+        let actual = actual.to_string();
+        let (actual_colored, actual_multi_line_colored, max_pad) = if actual.lines().count() > 1 {
+            (
+                " ".blue(),
+                actual.lines().map(|line| format!("\n{}", line.blue().on_blue())).map(|line| line.to_string()).collect(),
+                10,
+            )
+        } else {
+            (
+                actual.blue(),
+                String::from(""),
+                10 - max(0, actual.len() as i32 - 15),
+            )
+        };
+        let duration_string = format!("{:?}", duration).trim().to_string();
+        let pad_duration_by = max(0, max_pad - duration_string.chars().count() as i32);
+        let duration_string = format!("{}{}", " ".repeat(pad_duration_by as usize), duration_string).purple();
+        println!("{}{}", format!("Part {} output {:>15} {}", id, actual_colored, duration_string).on_blue(), actual_multi_line_colored);
         duration
     }
 
@@ -73,7 +111,7 @@ impl<R1: AocResult + 'static, R2: AocResult+ 'static> Day<R1, R2> {
     }
 
     pub fn run(&self) -> (Duration, Duration) {
-        println!("~~~~~~~~{{ {} }} ~~~~~~~~", format!("Day{:0>2}", self.id).yellow());
+        println!("~~~~~~~~~ {{ {} }} ~~~~~~~~~", format!("Day{:0>2}", self.id).yellow());
         self.run_part_test(1, &self.part1);
         let first = self.run_part_actual(1, &self.part1);
         self.run_part_test(2, &self.part2);

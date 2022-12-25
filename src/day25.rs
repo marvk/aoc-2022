@@ -1,7 +1,7 @@
-use crate::harness::{Day, Part};
+use crate::harness::{Day, EmptyPart, Part};
 
-pub fn day25() -> Day<String, ()> {
-    Day::new(25, Box::new(Part1 {}), Box::new(Part2 {}))
+pub fn day25() -> Day<String, String> {
+    Day::new(25, Box::new(Part1 {}), Box::new(EmptyPart{}))
 }
 
 pub struct Part1;
@@ -61,17 +61,5 @@ impl Part<String> for Part1 {
         }
 
         result.chars().rev().collect()
-    }
-}
-
-pub struct Part2;
-
-impl Part<()> for Part2 {
-    fn expect_test(&self) -> () {
-        ()
-    }
-
-    fn solve(&self, _: &Vec<String>) -> () {
-        ()
     }
 }
