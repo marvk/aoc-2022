@@ -1,10 +1,12 @@
 use crate::harness::{Day, EmptyPart, Part};
 
 pub fn day25() -> Day<String, String> {
-    Day::new(25, Box::new(Part1 {}), Box::new(EmptyPart{}))
+    Day::new(25, Box::new(Part1 {}), Box::new(EmptyPart {}))
 }
 
 pub struct Part1;
+
+const RADIX: i64 = 5;
 
 impl Part<String> for Part1 {
     fn expect_test(&self) -> String {
@@ -17,7 +19,7 @@ impl Part<String> for Part1 {
                 .filter(|line| !line.is_empty())
                 .flat_map(|line| line.chars().rev().enumerate())
                 .map(|(i, char)| {
-                    let f1 = 5_i64.pow(i as u32);
+                    let f1 = RADIX.pow(i as u32);
                     let f2 = match char {
                         '2' => 2,
                         '1' => 1,
@@ -33,33 +35,34 @@ impl Part<String> for Part1 {
         let mut result = String::new();
 
         for i in 0.. {
-            let current_pow = 5_i64.pow(i);
-            let next_pow = 5_i64.pow(i + 1);
+            let current_pow = RADIX.pow(i);
+            let next_pow = RADIX.pow(i + 1);
+
             let remainder = sum % next_pow;
-            let count = remainder / current_pow;
-            let amount = match count {
-                0 | 1 | 2 => count,
+            let multiple = remainder / current_pow;
+
+            let digit = match multiple {
+                0 | 1 | 2 => multiple,
                 3 => -2,
                 4 => -1,
                 _ => panic!(),
             };
 
-            let char = match amount {
-                0 | 1 | 2 => char::from_digit(amount as u32, 10).unwrap(),
+            let char = match digit {
+                0 | 1 | 2 => char::from_digit(digit as u32, 10).unwrap(),
                 -2 => '=',
                 -1 => '-',
                 _ => panic!(),
             };
 
-            result.push(char);
-
-            sum -= amount * current_pow;
+            result.insert(0, char);
+            sum -= digit * current_pow;
 
             if sum == 0 {
                 break;
             }
         }
 
-        result.chars().rev().collect()
+        result
     }
 }
